@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
          is_within_sla,
          is_late,
          response_time_seconds,
+         synced,
          to_char(created_at AT TIME ZONE 'UTC', ${ISO}) AS created_at
        FROM responses
        ${whereSql}

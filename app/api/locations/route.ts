@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(0, offsetParam);
 
     const selectColumns = `
-      id, session_id, emp_id, latitude, longitude,
+      id, session_id, emp_id, latitude, longitude, location_source,
       to_char(logged_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as logged_at,
       synced,
       to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as created_at

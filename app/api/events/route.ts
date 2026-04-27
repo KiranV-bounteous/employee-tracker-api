@@ -5,8 +5,10 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
-    const limit = Math.min(parseInt(searchParams.get("limit") ?? "100"), 500);
-    const offset = parseInt(searchParams.get("offset") ?? "0");
+    const rawLimit = parseInt(searchParams.get("limit") ?? "100", 10);
+    const rawOffset = parseInt(searchParams.get("offset") ?? "0", 10);
+    const limit = Math.min(Math.max(1, isNaN(rawLimit) ? 100 : rawLimit), 500);
+    const offset = Math.max(0, isNaN(rawOffset) ? 0 : rawOffset);
 
     const result = status
       ? await sql`

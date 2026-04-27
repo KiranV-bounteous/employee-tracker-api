@@ -10,10 +10,10 @@ export async function GET(request: NextRequest) {
     const limit  = Math.min(Math.max(1, parseInt(searchParams.get("limit")  || "500", 10)), 1000);
     const offset = Math.max(0, parseInt(searchParams.get("offset") || "0",   10));
 
-    const conds: string[] = ["event_id IS NOT NULL"];
+    const conds: string[] = [];
     const params: any[] = [];
     if (createdSince) { params.push(createdSince); conds.push(`created_at >= $${params.length}`); }
-    const whereSql = `WHERE ${conds.join(" AND ")}`;
+    const whereSql = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
 
     const totalRes = await sql.query(
       `SELECT COUNT(*)::int AS total FROM alerts ${whereSql}`,

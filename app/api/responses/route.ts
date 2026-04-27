@@ -54,9 +54,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Verify alert exists, belongs to employee, and fetch sla_deadline for is_late computation
+    // Verify alert exists, belongs to employee; fetch sla_deadline + event_id + created_at for sync write
     const alert = await sql`
-      SELECT id, sla_deadline FROM alerts
+      SELECT id, sla_deadline, event_id, created_at FROM alerts
       WHERE id = ${alertId} AND emp_id = ${employeeId.trim()}
       LIMIT 1
     `;
@@ -72,11 +72,26 @@ export async function POST(request: NextRequest) {
     const respondedAt = new Date(timestamp);
     // Compute server-side: response is late if it arrived after the SLA deadline
     const isLate = respondedAt > slaDeadline;
+    const isWithinSla = !isLate;
+    const responseTimeSeconds = Math.max(
+      0,
+      Math.floor((respondedAt.getTime() - new Date(alert.rows[0].created_at ?? respondedAt).getTime()) / 1000)
+    );
+
+    // Map mobile-friendly text to canonical sync type
+    const responseTypeMap: Record<string, string> = {
+      "Safe": "safe",
+      "Need Help": "need_help",
+      "Unable to Respond": "unable_to_respond",
+    };
+    const responseType = responseTypeMap[responseText];
+    const eventId = alert.rows[0].event_id ?? null;
 
     const lat = latitude ?? null;
     const lng = longitude ?? null;
 
-    const result = await sql`
+    // Write to legacy alert_responses (for backward compat with existing reports)
+    const legacy = await sql`
       INSERT INTO alert_responses (alert_id, emp_id, response_text, responded_at, latitude, longitude, is_late)
       VALUES (
         ${alertId},
@@ -99,8 +114,26 @@ export async function POST(request: NextRequest) {
         to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at
     `;
 
+    // ALSO write to responses table (Spring sync source) — best effort, don't fail mobile if this errors
+    if (eventId) {
+      try {
+        await sql`
+          INSERT INTO responses (
+            alert_id, event_id, emp_id, response_type, response_lat, response_lng,
+            responded_at, is_within_sla, is_late, response_time_seconds, synced
+          ) VALUES (
+            ${alertId}, ${eventId}, ${employeeId.trim()}, ${responseType},
+            ${lat}, ${lng}, ${timestamp},
+            ${isWithinSla}, ${isLate}, ${responseTimeSeconds}, FALSE
+          )
+        `;
+      } catch (e) {
+        console.error("[POST /api/responses] failed to write to responses table:", e);
+      }
+    }
+
     return NextResponse.json(
-      { success: true, data: result.rows[0] },
+      { success: true, data: legacy.rows[0] },
       { status: 201 }
     );
   } catch (error) {
